@@ -19,6 +19,8 @@
 # exit on any error
 set -e
 
+K8S_SWIFT_CONTAINER=k8s-swift-container
+
 # Use the config file specified in $KUBE_CONFIG_FILE, or default to
 # config-default.sh.
 KUBE_ROOT=$(dirname "${BASH_SOURCE}")/../..
@@ -106,7 +108,7 @@ function create-stack() {
 #   ROOT
 #   KUBERNETES_RELEASE_TAR
 function upload-resources() {
-  swift post kubernetes --read-acl '.r:*,.rlistings'
+  swift post $K8S_SWIFT_CONTAINER --read-acl '.r:*,.rlistings'
 
   locations=(
     "${ROOT}/../../_output/release-tars/${KUBERNETES_RELEASE_TAR}"
@@ -117,11 +119,11 @@ function upload-resources() {
   RELEASE_TAR_PATH=$(dirname ${RELEASE_TAR_LOCATION})
 
   echo "[INFO] Uploading ${KUBERNETES_RELEASE_TAR}"
-  swift upload kubernetes ${RELEASE_TAR_PATH}/${KUBERNETES_RELEASE_TAR} \
+  swift upload $K8S_SWIFT_CONTAINER ${RELEASE_TAR_PATH}/${KUBERNETES_RELEASE_TAR} \
     --object-name kubernetes-server.tar.gz
 
   echo "[INFO] Uploading kubernetes-salt.tar.gz"
-  swift upload kubernetes ${RELEASE_TAR_PATH}/kubernetes-salt.tar.gz \
+  swift upload $K8S_SWIFT_CONTAINER ${RELEASE_TAR_PATH}/kubernetes-salt.tar.gz \
     --object-name kubernetes-salt.tar.gz
 }
 
@@ -188,7 +190,7 @@ function run-heat-script() {
   if [[ -z $SWIFT_SERVER_URL ]]; then
     SWIFT_SERVER_URL=$(openstack catalog show object-store --format value | egrep -o "publicURL: (.+)$" | cut -d" " -f2)
   fi
-  local swift_repo_url="${SWIFT_SERVER_URL}/kubernetes"
+  local swift_repo_url="${SWIFT_SERVER_URL}/$K8S_SWIFT_CONTAINER"
 
   if [ $CREATE_IMAGE = true ]; then
     echo "[INFO] Retrieve new image ID"
