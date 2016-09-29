@@ -48,6 +48,7 @@
 {% endif -%}
 
 {% set address = "--address=127.0.0.1" -%}
+{% set address = "--address=0.0.0.0" -%}
 
 {% set bind_address = "" -%}
 {% if grains.publicAddressOverride is defined -%}
