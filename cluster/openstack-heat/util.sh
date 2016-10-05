@@ -19,7 +19,7 @@
 # exit on any error
 set -e
 
-K8S_SWIFT_CONTAINER=k8s-swift-container
+K8S_SWIFT_CONTAINER=irf-swift-container
 
 # Use the config file specified in $KUBE_CONFIG_FILE, or default to
 # config-default.sh.
