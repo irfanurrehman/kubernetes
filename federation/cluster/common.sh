@@ -26,6 +26,7 @@
 
 # Provides the $KUBERNETES_PROVIDER variable and detect-project function
 source "${KUBE_ROOT}/cluster/kube-util.sh"
+source "${KUBE_ROOT}/hack/lib/util.sh"
 
 # If $FEDERATION_PUSH_REPO_BASE isn't set, then set the GCR registry name
 # based on the detected project name for gce and gke providers.
@@ -109,10 +110,11 @@ function create-federation-api-objects {
 
     export FEDERATION_API_HOST=""
     export KUBE_MASTER_IP=""
-    if [[ "$KUBERNETES_PROVIDER" == "vagrant" ]];then
+    if [[ "$KUBERNETES_PROVIDER" == "vagrant" || "$KUBERNETES_PROVIDER" = "openstack" ]];then
 	# The vagrant approach is to use a nodeport service, and point kubectl at one of the nodes
 	$template "${manifests_root}/federation-apiserver-nodeport-service.yaml" | $host_kubectl create -f -
-	node_addresses=`$host_kubectl get nodes -o=jsonpath='{.items[*].status.addresses[?(@.type=="InternalIP")].address}'`
+	#node_addresses=`$host_kubectl get nodes -o=jsonpath='{.items[*].status.addresses[?(@.type=="InternalIP")].address}'`
+	node_addresses=`$host_kubectl get nodes -o=jsonpath='{.items[*].status.addresses[?(@.type=="ExternalIP")].address}'`
 	FEDERATION_API_HOST=`printf "$node_addresses" | cut -d " " -f1`
 	KUBE_MASTER_IP="${FEDERATION_API_HOST}:${FEDERATION_API_NODEPORT}"
     elif [[ "$KUBERNETES_PROVIDER" == "gce" || "$KUBERNETES_PROVIDER" == "gke" || "$KUBERNETES_PROVIDER" == "aws" ]];then
@@ -165,20 +167,21 @@ function create-federation-api-objects {
     # Note: This is used only by the test setup (where kubernetes clusters are
     # brought up with FEDERATION=true). Users are expected to create this secret
     # themselves.
-    for dir in ${KUBECONFIG_DIR}/federation/kubernetes-apiserver/*; do
+#    for dir in ${KUBECONFIG_DIR}/federation/kubernetes-apiserver/*; do
       # We create a secret with the same name as the directory name (which is
       # same as cluster name in kubeconfig).
       # Massage the name so that it is valid (should not contain "_" and max 253
       # chars)
-      name=$(basename $dir)
-      name=$(echo "$name" | sed -e "s/_/-/g")  # Replace "_" by "-"
-      name=${name:0:252}
-      echo "Creating secret with name: $name"
-      $host_kubectl create secret generic ${name} --from-file="${dir}/kubeconfig" --namespace="${FEDERATION_NAMESPACE}"
-    done
+#      name=$(basename $dir)
+#      name=$(echo "$name" | sed -e "s/_/-/g")  # Replace "_" by "-"
+#      name=${name:0:252}
+#      echo "Creating secret with name: $name"
+#      $host_kubectl create secret generic ${name} --from-file="${dir}/kubeconfig" --namespace="${FEDERATION_NAMESPACE}"
+#    done
 
     # Create server certificates.
-    ensure-temp-dir
+    #ensure-temp-dir
+    kube::util::ensure-temp-dir
     echo "Creating federation apiserver certs for IP: $FEDERATION_API_HOST"
     MASTER_NAME="federation-apiserver" create-federation-apiserver-certs ${FEDERATION_API_HOST}
     export FEDERATION_APISERVER_CA_CERT_BASE64="${FEDERATION_APISERVER_CA_CERT_BASE64}"
