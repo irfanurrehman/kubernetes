@@ -110,7 +110,7 @@ function create-federation-api-objects {
 
     export FEDERATION_API_HOST=""
     export KUBE_MASTER_IP=""
-    if [[ "$KUBERNETES_PROVIDER" == "vagrant" || "$KUBERNETES_PROVIDER" = "openstack" ]];then
+    if [[ "$KUBERNETES_PROVIDER" == "vagrant" || "$KUBERNETES_PROVIDER" == "openstack" ]];then
 	# The vagrant approach is to use a nodeport service, and point kubectl at one of the nodes
 	$template "${manifests_root}/federation-apiserver-nodeport-service.yaml" | $host_kubectl create -f -
 	#node_addresses=`$host_kubectl get nodes -o=jsonpath='{.items[*].status.addresses[?(@.type=="InternalIP")].address}'`
