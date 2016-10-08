@@ -1,0 +1,47 @@
+---
+apiVersion: extensions/v1beta1
+kind: ReplicaSet
+metadata:
+  name: show-rs1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      rs: show-rs1
+  template:
+    metadata:
+      labels:
+        rs: show-rs1
+        app: show
+    spec:
+      containers:
+      - name: show-container
+        image: jianhuiz/fed-show
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+        env:
+        - name: USER_VAR
+          value: Kubernetes Federation Demo
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+#        - name: POD_NODE_NAME
+#          valueFrom:
+#            fieldRef:
+ #             fieldPath: spec.nodeName
+#        - name: POD_ANNOTATIONS
+#          valueFrom:
+#            fieldRef:
+#              fieldPath: metadata.annotations
+      restartPolicy: Always
