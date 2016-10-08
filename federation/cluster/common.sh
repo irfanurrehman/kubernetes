@@ -304,6 +304,9 @@ function push-federation-images {
         printf " FROM debian:jessie \n ADD ${binary} /usr/local/bin/${binary}\n" > ${docker_file_path}
 
         local docker_image_tag="${FEDERATION_PUSH_REPO_BASE}/${binary}:${FEDERATION_IMAGE_TAG}"
+        #TODO: remove this later after finding the root cause 
+        #for some reason the image tag was not populated as part of build stage
+        echo ${FEDERATION_IMAGE_TAG} > ${KUBE_ROOT}/federation/manifests/federated-image.tag
 
         # Build the docker image on-the-fly.
         #
