@@ -161,10 +161,16 @@ func initFederation(cmdOut io.Writer, config util.AdminConfig, cmd *cobra.Comman
 	if err != nil {
 		return err
 	}
-	ips, hostnames, err := waitForLoadBalancerAddress(hostClientset, svc)
-	if err != nil {
-		return err
-	}
+
+        ips := []string{}
+	hostnames := []string{}
+
+        ips = append(ips, "104.197.55.216")
+        hostnames = append(hostnames, "kubernetes-minion-group-n3zf")
+	//ips, hostnames, err := waitForLoadBalancerAddress(hostClientset, svc)
+	//if err != nil {
+	//	return err
+	//}
 
 	// 3. Generate TLS certificates and credentials
 	entKeyPairs, err := genCerts(initFlags.FederationSystemNamespace, initFlags.Name, svc.Name, HostClusterLocalDNSZoneName, ips, hostnames)
@@ -243,7 +249,8 @@ func createService(clientset *client.Clientset, namespace, svcName string) (*api
 			Labels:    componentLabel,
 		},
 		Spec: api.ServiceSpec{
-			Type:     api.ServiceTypeLoadBalancer,
+		//	Type:     api.ServiceTypeLoadBalancer,
+			Type:     api.ServiceTypeNodePort,
 			Selector: apiserverSvcSelector,
 			Ports: []api.ServicePort{
 				{
