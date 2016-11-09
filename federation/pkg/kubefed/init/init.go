@@ -173,11 +173,14 @@ func initFederation(cmdOut io.Writer, config util.AdminConfig, cmd *cobra.Comman
 	}
 
 	if !dryRun {
-		var err error
-		ips, hostnames, err = waitForLoadBalancerAddress(hostClientset, svc)
-		if err != nil {
-			return err
-		}
+		//var err error
+		//ips, hostnames, err = waitForLoadBalancerAddress(hostClientset, svc)
+		ips = append(ips, "104.197.209.254")
+		hostnames = append(hostnames, " kubernetes-minion-group-d13n")
+
+		//if err != nil {
+		//	return err
+		//}
 	}
 
 	// 3. Generate TLS certificates and credentials
@@ -266,7 +269,7 @@ func createService(clientset *client.Clientset, namespace, svcName string, dryRu
 			Labels:    componentLabel,
 		},
 		Spec: api.ServiceSpec{
-			Type:     api.ServiceTypeLoadBalancer,
+			Type:     api.ServiceTypeNodePort,
 			Selector: apiserverSvcSelector,
 			Ports: []api.ServicePort{
 				{
@@ -423,7 +426,7 @@ func createPVC(clientset *client.Clientset, namespace, svcName, etcdPVCapacity s
 
 func createAPIServer(clientset *client.Clientset, namespace, name, image, credentialsName, pvcName, advertiseAddress string, dryRun bool) (*extensions.Deployment, error) {
 	command := []string{
-		"/hyperkube",
+		"/usr/local/bin/hyperkube",
 		"federation-apiserver",
 		"--bind-address=0.0.0.0",
 		"--etcd-servers=http://localhost:2379",
@@ -543,7 +546,7 @@ func createControllerManager(clientset *client.Clientset, namespace, name, cmNam
 							Name:  "controller-manager",
 							Image: image,
 							Command: []string{
-								"/hyperkube",
+								"/usr/local/bin/hyperkube",
 								"federation-controller-manager",
 								"--master=https://federation-apiserver",
 								"--kubeconfig=/etc/federation/controller-manager/kubeconfig",
