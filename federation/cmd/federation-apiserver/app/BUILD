@@ -13,6 +13,7 @@ load(
 go_library(
     name = "go_default_library",
     srcs = [
+        "autoscaling.go",
         "core.go",
         "extensions.go",
         "federation.go",
@@ -33,6 +34,8 @@ go_library(
         "//pkg/api/install:go_default_library",
         "//pkg/api/rest:go_default_library",
         "//pkg/apimachinery/registered:go_default_library",
+        "//pkg/apis/autoscaling:go_default_library",
+        "//pkg/apis/autoscaling/install:go_default_library",
         "//pkg/apis/extensions:go_default_library",
         "//pkg/apis/extensions/install:go_default_library",
         "//pkg/apiserver/authenticator:go_default_library",
@@ -43,6 +46,7 @@ go_library(
         "//pkg/genericapiserver:go_default_library",
         "//pkg/genericapiserver/authorizer:go_default_library",
         "//pkg/genericapiserver/filters:go_default_library",
+        "//pkg/registry/autoscaling/horizontalpodautoscaler/etcd:go_default_library",
         "//pkg/registry/cachesize:go_default_library",
         "//pkg/registry/core/configmap/etcd:go_default_library",
         "//pkg/registry/core/event/etcd:go_default_library",
