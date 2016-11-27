@@ -18,6 +18,8 @@ package fake
 
 import (
 	clientset "k8s.io/kubernetes/federation/client/clientset_generated/federation_release_1_5"
+	v1autoscaling "k8s.io/kubernetes/federation/client/clientset_generated/federation_release_1_5/typed/autoscaling/v1"
+	fakev1autoscaling "k8s.io/kubernetes/federation/client/clientset_generated/federation_release_1_5/typed/autoscaling/v1/fake"
 	v1core "k8s.io/kubernetes/federation/client/clientset_generated/federation_release_1_5/typed/core/v1"
 	fakev1core "k8s.io/kubernetes/federation/client/clientset_generated/federation_release_1_5/typed/core/v1/fake"
 	v1beta1extensions "k8s.io/kubernetes/federation/client/clientset_generated/federation_release_1_5/typed/extensions/v1beta1"
@@ -74,6 +76,16 @@ func (c *Clientset) CoreV1() v1core.CoreV1Interface {
 // Core retrieves the CoreV1Client
 func (c *Clientset) Core() v1core.CoreV1Interface {
 	return &fakev1core.FakeCoreV1{Fake: &c.Fake}
+}
+
+// AutoscalingV1 retrieves the AutoscalingV1Client
+func (c *Clientset) AutoscalingV1() v1autoscaling.AutoscalingV1Interface {
+	return &fakev1autoscaling.FakeAutoscalingV1{Fake: &c.Fake}
+}
+
+// Autoscaling retrieves the AutoscalingV1Client
+func (c *Clientset) Autoscaling() v1autoscaling.AutoscalingV1Interface {
+	return &fakev1autoscaling.FakeAutoscalingV1{Fake: &c.Fake}
 }
 
 // ExtensionsV1beta1 retrieves the ExtensionsV1beta1Client
