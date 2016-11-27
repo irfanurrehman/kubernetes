@@ -18,6 +18,8 @@ package fake
 
 import (
 	clientset "k8s.io/kubernetes/federation/client/clientset_generated/federation_internalclientset"
+	internalversionautoscaling "k8s.io/kubernetes/federation/client/clientset_generated/federation_internalclientset/typed/autoscaling/internalversion"
+	fakeinternalversionautoscaling "k8s.io/kubernetes/federation/client/clientset_generated/federation_internalclientset/typed/autoscaling/internalversion/fake"
 	internalversioncore "k8s.io/kubernetes/federation/client/clientset_generated/federation_internalclientset/typed/core/internalversion"
 	fakeinternalversioncore "k8s.io/kubernetes/federation/client/clientset_generated/federation_internalclientset/typed/core/internalversion/fake"
 	internalversionextensions "k8s.io/kubernetes/federation/client/clientset_generated/federation_internalclientset/typed/extensions/internalversion"
@@ -69,6 +71,11 @@ var _ clientset.Interface = &Clientset{}
 // Core retrieves the CoreClient
 func (c *Clientset) Core() internalversioncore.CoreInterface {
 	return &fakeinternalversioncore.FakeCore{Fake: &c.Fake}
+}
+
+// Autoscaling retrieves the AutoscalingClient
+func (c *Clientset) Autoscaling() internalversionautoscaling.AutoscalingInterface {
+	return &fakeinternalversionautoscaling.FakeAutoscaling{Fake: &c.Fake}
 }
 
 // Extensions retrieves the ExtensionsClient
