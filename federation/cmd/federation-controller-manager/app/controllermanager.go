@@ -37,6 +37,7 @@ import (
 	"k8s.io/kubernetes/federation/cmd/federation-controller-manager/app/options"
 	"k8s.io/kubernetes/federation/pkg/dnsprovider"
 	"k8s.io/kubernetes/federation/pkg/federatedtypes"
+	autoscalercontroller "k8s.io/kubernetes/federation/pkg/federation-controller/autoscaler"
 	clustercontroller "k8s.io/kubernetes/federation/pkg/federation-controller/cluster"
 	configmapcontroller "k8s.io/kubernetes/federation/pkg/federation-controller/configmap"
 	daemonsetcontroller "k8s.io/kubernetes/federation/pkg/federation-controller/daemonset"
@@ -151,6 +152,11 @@ func StartControllers(s *options.CMServer, restClientCfg *restclient.Config) err
 			glog.Fatalf("Failed to start service controller: %v", err)
 		}
 	}
+
+	autoscalerClientset := federationclientset.NewForConfigOrDie(restclient.AddUserAgent(restClientCfg, "federated-autoscaler-controller"))
+	autoscalerController := autoscalercontroller.NewAutoscalerController(autoscalerClientset)
+	glog.Infof("Running autoscaler controller")
+	autoscalerController.Run(wait.NeverStop)
 
 	if controllerEnabled(s.Controllers, serverResources, namespacecontroller.ControllerName, namespacecontroller.RequiredResources, true) {
 		glog.Infof("Loading client config for namespace controller %q", "namespace-controller")

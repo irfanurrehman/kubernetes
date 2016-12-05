@@ -23,6 +23,7 @@ go_library(
         "//federation/pkg/dnsprovider/providers/coredns:go_default_library",
         "//federation/pkg/dnsprovider/providers/google/clouddns:go_default_library",
         "//federation/pkg/federatedtypes:go_default_library",
+        "//federation/pkg/federation-controller/autoscaler:go_default_library",
         "//federation/pkg/federation-controller/cluster:go_default_library",
         "//federation/pkg/federation-controller/configmap:go_default_library",
         "//federation/pkg/federation-controller/daemonset:go_default_library",
