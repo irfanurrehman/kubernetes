@@ -33,6 +33,7 @@ go_library(
         "//federation/pkg/federation-controller/replicaset:go_default_library",
         "//federation/pkg/federation-controller/secret:go_default_library",
         "//federation/pkg/federation-controller/service:go_default_library",
+        "//federation/pkg/federation-controller/autoscaler:go_default_library",
         "//federation/pkg/federation-controller/util:go_default_library",
         "//pkg/apis/meta/v1:go_default_library",
         "//pkg/client/restclient:go_default_library",

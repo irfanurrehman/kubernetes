@@ -38,6 +38,8 @@ import (
 	replicasetcontroller "k8s.io/kubernetes/federation/pkg/federation-controller/replicaset"
 	secretcontroller "k8s.io/kubernetes/federation/pkg/federation-controller/secret"
 	servicecontroller "k8s.io/kubernetes/federation/pkg/federation-controller/service"
+	autoscalercontroller "k8s.io/kubernetes/federation/pkg/federation-controller/autoscaler"
+
 	"k8s.io/kubernetes/federation/pkg/federation-controller/util"
 	metav1 "k8s.io/kubernetes/pkg/apis/meta/v1"
 	"k8s.io/kubernetes/pkg/client/restclient"
@@ -170,6 +172,11 @@ func StartControllers(s *options.CMServer, restClientCfg *restclient.Config) err
 	namespaceController := namespacecontroller.NewNamespaceController(nsClientset)
 	glog.Infof("Running namespace controller")
 	namespaceController.Run(wait.NeverStop)
+
+	autoscalerClientset := federationclientset.NewForConfigOrDie(restclient.AddUserAgent(restClientCfg, "federated-autoscaler-controller"))
+	autoscalerController := autoscalercontroller.NewAutoscalerController(autoscalerClientset)
+	glog.Infof("Running autoscaler controller")
+	autoscalerController.Run(wait.NeverStop)
 
 	secretcontrollerClientset := federationclientset.NewForConfigOrDie(restclient.AddUserAgent(restClientCfg, "secret-controller"))
 	secretcontroller := secretcontroller.NewSecretController(secretcontrollerClientset)
