@@ -47,9 +47,9 @@ type DeploymentAdapter struct {
 func NewDeploymentAdapter(client federationclientset.Interface, config *restclient.Config) FederatedTypeAdapter {
 	schedulingAdapter := schedulingAdapter{
 		preferencesAnnotationName: FedDeploymentPreferencesAnnotation,
-		updateStatusFunc: func(obj pkgruntime.Object, status interface{}) error {
+		updateStatusFunc: func(obj pkgruntime.Object, schedulingInfo interface{}) error {
 			deployment := obj.(*extensionsv1.Deployment)
-			typedStatus := status.(ReplicaSchedulingStatus)
+			typedStatus := schedulingInfo.(*ReplicaSchedulingInfo).Status
 			if typedStatus.Replicas != deployment.Status.Replicas || typedStatus.UpdatedReplicas != deployment.Status.UpdatedReplicas ||
 				typedStatus.ReadyReplicas != deployment.Status.ReadyReplicas || typedStatus.AvailableReplicas != deployment.Status.AvailableReplicas {
 				deployment.Status = extensionsv1.DeploymentStatus{

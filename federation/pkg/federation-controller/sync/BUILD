@@ -56,6 +56,23 @@ go_library(
     ],
 )
 
+go_test(
+    name = "go_default_test",
+    srcs = ["controller_test.go"],
+    library = ":go_default_library",
+    tags = ["automanaged"],
+    deps = [
+        "//federation/apis/federation/v1beta1:go_default_library",
+        "//federation/pkg/federatedtypes:go_default_library",
+        "//federation/pkg/federation-controller/util:go_default_library",
+        "//federation/pkg/federation-controller/util/test:go_default_library",
+        "//vendor/github.com/stretchr/testify/require:go_default_library",
+        "//vendor/k8s.io/api/core/v1:go_default_library",
+        "//vendor/k8s.io/apimachinery/pkg/apis/meta/v1:go_default_library",
+        "//vendor/k8s.io/apimachinery/pkg/runtime:go_default_library",
+    ],
+)
+
 filegroup(
     name = "package-srcs",
     srcs = glob(["**"]),

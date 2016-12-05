@@ -37,6 +37,14 @@ import (
 	"github.com/golang/glog"
 )
 
+type ScheduleAction string
+
+const (
+	ActionAdd    = "add"
+	ActionUpdate = "update"
+	ActionDelete = "delete"
+)
+
 // ReplicaSchedulingStatus contains the status of the replica type objects (rs or deployment)
 // that are being scheduled into joined clusters.
 type ReplicaSchedulingStatus struct {
@@ -58,8 +66,8 @@ type ReplicaSchedulingInfo struct {
 // federated type that requires more complex synchronization logic.
 type SchedulingAdapter interface {
 	GetSchedule(obj pkgruntime.Object, key string, clusters []*federationapi.Cluster, informer fedutil.FederatedInformer) (interface{}, error)
-	ScheduleObject(cluster *federationapi.Cluster, clusterObj pkgruntime.Object, federationObjCopy pkgruntime.Object, schedulingInfo interface{}) (pkgruntime.Object, bool, error)
-	UpdateFederatedStatus(obj pkgruntime.Object, status interface{}) error
+	ScheduleObject(cluster *federationapi.Cluster, clusterObj pkgruntime.Object, federationObjCopy pkgruntime.Object, schedulingInfo interface{}) (pkgruntime.Object, ScheduleAction, error)
+	UpdateFederatedStatus(obj pkgruntime.Object, schedulingInfo interface{}) error
 
 	// EquivalentIgnoringSchedule returns whether obj1 and obj2 are
 	// equivalent ignoring differences due to scheduling.
@@ -128,7 +136,7 @@ func (a *schedulingAdapter) GetSchedule(obj pkgruntime.Object, key string, clust
 	}, nil
 }
 
-func (a *schedulingAdapter) ScheduleObject(cluster *federationapi.Cluster, clusterObj pkgruntime.Object, federationObjCopy pkgruntime.Object, schedulingInfo interface{}) (pkgruntime.Object, bool, error) {
+func (a *schedulingAdapter) ScheduleObject(cluster *federationapi.Cluster, clusterObj pkgruntime.Object, federationObjCopy pkgruntime.Object, schedulingInfo interface{}) (pkgruntime.Object, ScheduleAction, error) {
 	typedSchedulingInfo := schedulingInfo.(*ReplicaSchedulingInfo)
 	replicas, ok := typedSchedulingInfo.Schedule[cluster.Name]
 	if !ok {
@@ -152,11 +160,15 @@ func (a *schedulingAdapter) ScheduleObject(cluster *federationapi.Cluster, clust
 			}
 		}
 	}
-	return federationObjCopy, replicas > 0, nil
+	var action ScheduleAction = ""
+	if replicas > 0 {
+		action = ActionAdd
+	}
+	return federationObjCopy, action, nil
 }
 
-func (a *schedulingAdapter) UpdateFederatedStatus(obj pkgruntime.Object, status interface{}) error {
-	return a.updateStatusFunc(obj, status)
+func (a *schedulingAdapter) UpdateFederatedStatus(obj pkgruntime.Object, schedulingInfo interface{}) error {
+	return a.updateStatusFunc(obj, schedulingInfo)
 }
 
 func schedule(planner *planner.Planner, obj pkgruntime.Object, key string, clusterNames []string, currentReplicasPerCluster map[string]int64, estimatedCapacity map[string]int64) map[string]int64 {

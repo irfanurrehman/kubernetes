@@ -47,9 +47,9 @@ type ReplicaSetAdapter struct {
 func NewReplicaSetAdapter(client federationclientset.Interface, config *restclient.Config) FederatedTypeAdapter {
 	schedulingAdapter := schedulingAdapter{
 		preferencesAnnotationName: FedReplicaSetPreferencesAnnotation,
-		updateStatusFunc: func(obj pkgruntime.Object, status interface{}) error {
+		updateStatusFunc: func(obj pkgruntime.Object, schedulingInfo interface{}) error {
 			rs := obj.(*extensionsv1.ReplicaSet)
-			typedStatus := status.(ReplicaSchedulingStatus)
+			typedStatus := schedulingInfo.(*ReplicaSchedulingInfo).Status
 			if typedStatus.Replicas != rs.Status.Replicas || typedStatus.FullyLabeledReplicas != rs.Status.FullyLabeledReplicas ||
 				typedStatus.ReadyReplicas != rs.Status.ReadyReplicas || typedStatus.AvailableReplicas != rs.Status.AvailableReplicas {
 				rs.Status = extensionsv1.ReplicaSetStatus{
