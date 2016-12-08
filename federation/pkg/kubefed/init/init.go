@@ -168,10 +168,17 @@ func initFederation(cmdOut io.Writer, config util.AdminConfig, cmd *cobra.Comman
 	if err != nil {
 		return err
 	}
-	ips, hostnames, err := waitForLoadBalancerAddress(hostClientset, svc, dryRun)
-	if err != nil {
-		return err
-	}
+
+	ips := []string{}
+	hostnames := []string{}
+
+	ips = append(ips, "172.17.0.7")
+	hostnames = append(hostnames, "dind-node-1")
+
+	//ips, hostnames, err := waitForLoadBalancerAddress(hostClientset, svc)
+	//if err != nil {
+	//	return err
+	//}
 
 	// 3. Generate TLS certificates and credentials
 	entKeyPairs, err := genCerts(initFlags.FederationSystemNamespace, initFlags.Name, svc.Name, HostClusterLocalDNSZoneName, ips, hostnames)
@@ -205,7 +212,7 @@ func initFederation(cmdOut io.Writer, config util.AdminConfig, cmd *cobra.Comman
 		advertiseAddress = ips[0]
 	}
 
-	endpoint := advertiseAddress
+	endpoint := advertiseAddress + ":31443"
 	if advertiseAddress == "" && len(hostnames) > 0 {
 		endpoint = hostnames[0]
 	}
@@ -275,14 +282,15 @@ func createService(clientset *client.Clientset, namespace, svcName string, dryRu
 			Labels:    componentLabel,
 		},
 		Spec: api.ServiceSpec{
-			Type:     api.ServiceTypeLoadBalancer,
+			Type:     api.ServiceTypeNodePort,
 			Selector: apiserverSvcSelector,
 			Ports: []api.ServicePort{
 				{
 					Name:       "https",
 					Protocol:   "TCP",
 					Port:       443,
-					TargetPort: intstr.FromInt(443),
+					TargetPort: intstr.FromString(""),
+					NodePort: int32(31443),
 				},
 			},
 		},
@@ -436,6 +444,8 @@ func createAPIServer(clientset *client.Clientset, namespace, name, image, creden
 		"--etcd-servers=http://localhost:2379",
 		"--service-cluster-ip-range=10.0.0.0/16",
 		"--secure-port=443",
+		"--insecure-port=8080",
+		"--insecure-bind-address=0.0.0.0",
 		"--client-ca-file=/etc/federation/apiserver/ca.crt",
 		"--tls-cert-file=/etc/federation/apiserver/server.crt",
 		"--tls-private-key-file=/etc/federation/apiserver/server.key",
@@ -444,8 +454,6 @@ func createAPIServer(clientset *client.Clientset, namespace, name, image, creden
 	if advertiseAddress != "" {
 		command = append(command, fmt.Sprintf("--advertise-address=%s", advertiseAddress))
 	}
-
-	dataVolumeName := "etcddata"
 
 	dep := &extensions.Deployment{
 		ObjectMeta: api.ObjectMeta{
@@ -492,12 +500,6 @@ func createAPIServer(clientset *client.Clientset, namespace, name, image, creden
 								"--data-dir",
 								"/var/etcd/data",
 							},
-							VolumeMounts: []api.VolumeMount{
-								{
-									Name:      dataVolumeName,
-									MountPath: "/var/etcd",
-								},
-							},
 						},
 					},
 					Volumes: []api.Volume{
@@ -506,14 +508,6 @@ func createAPIServer(clientset *client.Clientset, namespace, name, image, creden
 							VolumeSource: api.VolumeSource{
 								Secret: &api.SecretVolumeSource{
 									SecretName: credentialsName,
-								},
-							},
-						},
-						{
-							Name: dataVolumeName,
-							VolumeSource: api.VolumeSource{
-								PersistentVolumeClaim: &api.PersistentVolumeClaimVolumeSource{
-									ClaimName: pvcName,
 								},
 							},
 						},
