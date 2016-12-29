@@ -314,6 +314,21 @@ func initFederation(cmdOut io.Writer, config util.AdminConfig, cmd *cobra.Comman
 		}
 		return printSuccess(cmdOut, ips, hostnames, svc)
 	}
+
+	//as the federation control plane is up and responding
+	//we create a config map in the fed control plane
+	//which subsequently is consumed by the dns servers of the yet to be registered clusters
+	//expecting that when ever a new cluster registers with it
+	//the control plane will create a config map in that cluster
+	//we however explicitly take care of cleaning this config map up at deregister (kubefed unjoin)
+	_, err = createFedConfigMap(config, initFlags.Name, initFlags.Kubeconfig, dnsZoneName, dryRun)
+	if err != nil {
+		return err
+	}
+
+	if !dryRun {
+		return printSuccess(cmdOut, ips, hostnames, svc)
+	}
 	_, err = fmt.Fprintf(cmdOut, "Federation control plane runs (dry run)\n")
 	return err
 }
@@ -803,6 +818,28 @@ func argMapsToArgStrings(argsMap, overrides map[string]string) []string {
 	// This is needed for the unit test deep copy to get an exact match
 	sort.Strings(args)
 	return args
+}
+
+func createFedConfigMap(config util.AdminConfig, fedName, kubeconfig, dnsZoneName string, dryRun bool) (*v1.ConfigMap, error) {
+	fedClientSet, err := config.FederationClientset(fedName, kubeconfig)
+	if err != nil {
+		return nil, err
+	}
+
+	configMap := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "kube-dns",
+			Namespace: "kube-system",
+		},
+		Data: map[string]string{
+			"federations": fmt.Sprintf("%s=%s", fedName, dnsZoneName),
+		},
+	}
+
+	if dryRun {
+		return configMap, nil
+	}
+	return fedClientSet.Core().ConfigMaps("kube-system").Create(configMap)
 }
 
 func waitForPods(clientset *client.Clientset, fedPods []string, namespace string) error {

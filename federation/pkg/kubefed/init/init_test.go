@@ -990,6 +990,20 @@ func fakeInitHostFactory(apiserverServiceType v1.ServiceType, federationName, na
 	podList.Items = append(podList.Items, apiServerPod)
 	podList.Items = append(podList.Items, cmPod)
 
+	configMap := v1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ConfigMap",
+			APIVersion: testapi.Default.GroupVersion().String(),
+		},
+		ObjectMeta: v1.ObjectMeta{
+			Name:      "kube-dns",
+			Namespace: "kube-system",
+		},
+		Data: map[string]string{
+			"federations": fmt.Sprintf("%s=%s", federationName, dnsZoneName),
+		},
+	}
+
 	f, tf, codec, _ := cmdtesting.NewAPIFactory()
 	extCodec := testapi.Extensions.Codec()
 	rbacCodec := testapi.Rbac.Codec()
@@ -1099,6 +1113,20 @@ func fakeInitHostFactory(apiserverServiceType v1.ServiceType, federationName, na
 					return nil, fmt.Errorf("Unexpected deployment object\n\tDiff: %s", diff.ObjectGoPrintDiff(got, want))
 				}
 				return &http.Response{StatusCode: http.StatusCreated, Header: kubefedtesting.DefaultHeader(), Body: kubefedtesting.ObjBody(extCodec, &want)}, nil
+			case p == "/api/v1/namespaces/kube-system/configmaps" && m == http.MethodPost:
+				body, err := ioutil.ReadAll(req.Body)
+				if err != nil {
+					return nil, err
+				}
+				var got v1.ConfigMap
+				_, _, err = codec.Decode(body, nil, &got)
+				if err != nil {
+					return nil, err
+				}
+				if !api.Semantic.DeepEqual(got, configMap) {
+					return nil, fmt.Errorf("Unexpected configMap object\n\tDiff: %s", diff.ObjectGoPrintDiff(got, configMap))
+				}
+				return &http.Response{StatusCode: http.StatusCreated, Header: kubefedtesting.DefaultHeader(), Body: kubefedtesting.ObjBody(codec, &configMap)}, nil
 			case p == "/api/v1/namespaces/federation-system/pods" && m == http.MethodGet:
 				return &http.Response{StatusCode: http.StatusOK, Header: kubefedtesting.DefaultHeader(), Body: kubefedtesting.ObjBody(codec, &podList)}, nil
 			case p == "/api/v1/namespaces/federation-system/serviceaccounts" && m == http.MethodPost:
