@@ -19,9 +19,7 @@ package kubefed
 import (
 	"fmt"
 	"io"
-	"net/url"
 
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	federationapi "k8s.io/kubernetes/federation/apis/federation"
@@ -30,6 +28,9 @@ import (
 	"k8s.io/kubernetes/pkg/kubectl/cmd/templates"
 	cmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
 	"k8s.io/kubernetes/pkg/kubectl/resource"
+	kubeinternalclientset "k8s.io/kubernetes/pkg/client/clientset_generated/internalclientset"
+	"k8s.io/kubernetes/pkg/api"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/spf13/cobra"
 )
@@ -82,25 +83,41 @@ func unjoinFederation(f cmdutil.Factory, cmdOut, cmdErr io.Writer, config util.A
 		return nil
 	}
 
-	// We need to ensure deleting the config map created in the deregistered cluster
-	// this configmap was created when the cluster joined this federation to aid
-	// the kube-dns of that cluster to aid service discovery
-	unjoinClusterFactory := config.HostFactory(unjoinFlags.Name, unjoinFlags.Kubeconfig)
-	err = deleteConfigMap(unjoinClusterFactory)
-	if err != nil {
-		fmt.Fprintf(cmdErr, "WARNING: Encountered error in deleting kube-dns configmap\n")
-		// We anyways continue to try and delete the secret further
-	}
-
-	// We want a separate client factory to communicate with the
-	// federation host cluster. See join_federation.go for details.
 	hostFactory := config.HostFactory(unjoinFlags.Host, unjoinFlags.Kubeconfig)
-	err = deleteSecret(hostFactory, cluster.Spec.SecretRef.Name, unjoinFlags.FederationSystemNamespace)
-	if isNotFound(err) {
-		fmt.Fprintf(cmdErr, "WARNING: secret %q not found in the host cluster, so it couldn't be deleted", cluster.Spec.SecretRef.Name)
-	} else if err != nil {
+	clientset, err := hostFactory.ClientSet()
+	if err != nil {
 		return err
 	}
+
+	po := config.PathOptions()
+	po.LoadingRules.ExplicitPath = unjoinFlags.Kubeconfig
+	clientConfig, err := po.GetStartingConfig()
+
+	secretName := cluster.Spec.SecretRef.Name
+	secret, err := clientset.Core().Secrets(unjoinFlags.FederationSystemNamespace).Get(secretName, metav1.GetOptions{})
+	if util.IsNotFound(err) {
+		// If this is the case, we cannot get the cluster clientset to delete the
+		// config map from that cluster and obviously cannot delete the not existing secret
+		// We just publish the warning as cluster has already been removed from federation
+		fmt.Fprintf(cmdErr, "WARNING: secret %q not found in the host cluster, so it couldn't be deleted", secretName)
+	} else if err != nil {
+		fmt.Fprintf(cmdErr, "WARNING: Error retrieving secret from the base cluster")
+	} else {
+		// We need to ensure deleting the config map created in the deregistered cluster
+		// This configmap was created when the cluster joined this federation to aid
+		// the kube-dns of that cluster to aid service discovery
+		err := deleteConfigMapFromCluster(secret, cluster, clientConfig)
+		if err != nil {
+			fmt.Fprintf(cmdErr, "WARNING: Encountered error in deleting kube-dns configmap, %v", err)
+			// We anyways continue to try and delete the secret further
+		}
+
+		err = deleteSecret(clientset, cluster.Spec.SecretRef.Name, unjoinFlags.FederationSystemNamespace)
+		if err != nil {
+			return err
+		}
+	}
+
 	_, err = fmt.Fprintf(cmdOut, "Successfully removed cluster %q from federation\n", unjoinFlags.Name)
 	return err
 }
@@ -126,7 +143,7 @@ func popCluster(f cmdutil.Factory, name string) (*federationapi.Cluster, error) 
 	rh := resource.NewHelper(client, mapping)
 	obj, err := rh.Get("", name, false)
 
-	if isNotFound(err) {
+	if util.IsNotFound(err) {
 		// Cluster isn't registered, there isn't anything to be done here.
 		return nil, nil
 	} else if err != nil {
@@ -142,29 +159,34 @@ func popCluster(f cmdutil.Factory, name string) (*federationapi.Cluster, error) 
 	return cluster, rh.Delete("", name)
 }
 
-func deleteConfigMap(unjoinClusterFactory cmdutil.Factory) error {
-	clientset, err := unjoinClusterFactory.ClientSet()
+func deleteConfigMapFromCluster(secret *api.Secret, cluster *federationapi.Cluster, config *clientcmdapi.Config) error {
+	serverAddress, err := util.GetServerAddress(cluster)
 	if err != nil {
 		return err
 	}
+	if serverAddress == "" {
+		return fmt.Errorf("failed to get server address for the cluster: %s", cluster.Name)
+	}
+
+	clientset, err := util.GetClientsetFromSecret(secret, serverAddress)
+	if err != nil  || clientset == nil {
+		// There is a possibility that the clientset is nil without any error reported
+		return err
+	}
+
+	configMap, err := clientset.Core().ConfigMaps(metav1.NamespaceSystem).Get(kubefedinit.KubeDnsName, &metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+
+
+	delete(configMap.Data, d)
+
 	return clientset.Core().ConfigMaps(metav1.NamespaceSystem).Delete(kubefedinit.KubeDnsName, &metav1.DeleteOptions{})
 }
 
 // deleteSecret deletes the secret with the given name from the host
 // cluster.
-func deleteSecret(hostFactory cmdutil.Factory, name, namespace string) error {
-	clientset, err := hostFactory.ClientSet()
-	if err != nil {
-		return err
-	}
+func deleteSecret(clientset *kubeinternalclientset.Clientset,  name, namespace string) error {
 	return clientset.Core().Secrets(namespace).Delete(name, &metav1.DeleteOptions{})
-}
-
-// isNotFound checks if the given error is a NotFound status error.
-func isNotFound(err error) bool {
-	statusErr := err
-	if urlErr, ok := err.(*url.Error); ok {
-		statusErr = urlErr.Err
-	}
-	return errors.IsNotFound(statusErr)
 }

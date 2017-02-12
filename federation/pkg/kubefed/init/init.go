@@ -46,7 +46,6 @@ import (
 	certutil "k8s.io/client-go/util/cert"
 	triple "k8s.io/client-go/util/cert/triple"
 	kubeadmkubeconfigphase "k8s.io/kubernetes/cmd/kubeadm/app/phases/kubeconfig"
-	fedclient "k8s.io/kubernetes/federation/client/clientset_generated/federation_clientset"
 	"k8s.io/kubernetes/federation/pkg/kubefed/util"
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/api/v1"
@@ -299,12 +298,7 @@ func initFederation(cmdOut io.Writer, config util.AdminConfig, cmd *cobra.Comman
 
 	// 8. Write the federation API server endpoint info, credentials
 	// and context to kubeconfig
-	err = updateKubeconfig(config, initFlags.Name, endpoint, entKeyPairs, dryRun)
-	if err != nil {
-		return err
-	}
-
-	fedClientSet, err := config.FederationClientset(initFlags.Name, initFlags.Kubeconfig)
+	err = updateKubeconfig(config, initFlags.Name, endpoint, dnsZoneName, entKeyPairs, dryRun)
 	if err != nil {
 		return err
 	}
@@ -315,14 +309,14 @@ func initFederation(cmdOut io.Writer, config util.AdminConfig, cmd *cobra.Comman
 		if err != nil {
 			return err
 		}
-		err = waitSrvHealthy(fedClientSet)
+		err = waitSrvHealthy(config, initFlags.Name, initFlags.Kubeconfig)
 		if err != nil {
 			return err
 		}
 		return printSuccess(cmdOut, ips, hostnames, svc)
 	}
 
-	// As the federation control plane is up and responding
+/*	// As the federation control plane is up and responding
 	// we create a config map in the fed control plane
 	// which subsequently is consumed by the dns servers of the yet to be registered clusters
 	// expecting that when ever a new cluster registers with it
@@ -336,6 +330,7 @@ func initFederation(cmdOut io.Writer, config util.AdminConfig, cmd *cobra.Comman
 	if !dryRun {
 		return printSuccess(cmdOut, ips, hostnames, svc)
 	}
+*/
 	_, err = fmt.Fprintf(cmdOut, "Federation control plane runs (dry run)\n")
 	return err
 }
@@ -827,31 +822,6 @@ func argMapsToArgStrings(argsMap, overrides map[string]string) []string {
 	return args
 }
 
-func createFedConfigMap(fedClientSet *fedclient.Clientset, fedName, dnsZoneName string, dryRun bool) (*v1.ConfigMap, error) {
-	data := map[string]string{
-		"federations": fmt.Sprintf("%s=%s", fedName, dnsZoneName),
-	}
-	newConfigMap := &v1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      KubeDnsName,
-			Namespace: metav1.NamespaceSystem,
-		},
-		Data: data,
-	}
-
-	if dryRun {
-		return newConfigMap, nil
-	}
-
-	existingConfigMap, err := fedClientSet.Core().ConfigMaps(metav1.NamespaceSystem).Get(KubeDnsName, metav1.GetOptions{})
-	if err != nil {
-		return fedClientSet.Core().ConfigMaps(metav1.NamespaceSystem).Create(newConfigMap)
-	}
-
-	existingConfigMap.Data = data
-	return fedClientSet.Core().ConfigMaps(metav1.NamespaceSystem).Update(existingConfigMap)
-}
-
 func waitForPods(clientset *client.Clientset, fedPods []string, namespace string) error {
 	err := wait.PollInfinite(podWaitInterval, func() (bool, error) {
 		podCheck := len(fedPods)
@@ -875,9 +845,13 @@ func waitForPods(clientset *client.Clientset, fedPods []string, namespace string
 	return err
 }
 
-func waitSrvHealthy(fedClientSet *fedclient.Clientset) error {
+func waitSrvHealthy(config util.AdminConfig, context, kubeconfig string) error {
+	fedClientSet, err := config.FederationClientset(context, kubeconfig)
+	if err != nil {
+		return err
+	}
 	fedDiscoveryClient := fedClientSet.Discovery()
-	err := wait.PollInfinite(podWaitInterval, func() (bool, error) {
+	err = wait.PollInfinite(podWaitInterval, func() (bool, error) {
 		body, err := fedDiscoveryClient.RESTClient().Get().AbsPath("/healthz").Do().Raw()
 		if err != nil {
 			return false, nil
@@ -904,7 +878,7 @@ func printSuccess(cmdOut io.Writer, ips, hostnames []string, svc *api.Service) e
 	return err
 }
 
-func updateKubeconfig(config util.AdminConfig, name, endpoint string, entKeyPairs *entityKeyPairs, dryRun bool) error {
+func updateKubeconfig(config util.AdminConfig, name, endpoint, dnsZoneName string, entKeyPairs *entityKeyPairs, dryRun bool) error {
 	po := config.PathOptions()
 	kubeconfig, err := po.GetStartingConfig()
 	if err != nil {
@@ -930,6 +904,18 @@ func updateKubeconfig(config util.AdminConfig, name, endpoint string, entKeyPair
 	context := clientcmdapi.NewContext()
 	context.Cluster = name
 	context.AuthInfo = name
+
+	data := map[string]string{
+		"federations": fmt.Sprintf("%s=%s", name, dnsZoneName),
+	}
+	configMap := v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      KubeDnsName,
+			Namespace: metav1.NamespaceSystem,
+		},
+		Data: data,
+	}
+	context.Extensions["kube-dns-configmap"] = configMap
 
 	// Update the config struct with API server endpoint info,
 	// credentials and context.

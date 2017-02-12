@@ -28,6 +28,8 @@ import (
 	kubectlcmd "k8s.io/kubernetes/pkg/kubectl/cmd"
 	"k8s.io/kubernetes/pkg/kubectl/cmd/templates"
 	cmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
+	"k8s.io/kubernetes/pkg/api/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/golang/glog"
 	"github.com/spf13/cobra"
@@ -39,6 +41,7 @@ const (
 	// details.
 	// TODO(madhusudancs): Make this value customizable.
 	defaultClientCIDR = "0.0.0.0/0"
+	KubeDnsName                 = "kube-dns"
 )
 
 var (
@@ -143,6 +146,14 @@ func joinFederation(f cmdutil.Factory, cmdOut io.Writer, config util.AdminConfig
 		DryRun:              dryRun,
 		OutputFormat:        cmdutil.GetFlagString(cmd, "output"),
 	})
+
+
+	clusterFactory := config.HostFactory(clusterContext, joinFlags.Kubeconfig)
+	_, err = createKubeDnsConfigMap(clusterFactory, clientConfig, dryRun)
+	if err != nil {
+		glog.V(2).Infof("Failed creating the kube-dns configmap in the joining cluster: %v", err)
+		return err
+	}
 }
 
 // minifyConfig is a wrapper around `clientcmdapi.MinifyConfig()` that
@@ -235,4 +246,44 @@ func extractScheme(url string) string {
 		scheme = segs[0]
 	}
 	return scheme
+}
+
+func createKubeDnsConfigMap(clusterFactory cmdutil.Factory, config *clientcmdapi.Config, dryRun bool) (*v1.ConfigMap, error) {
+	ctx := config.Contexts[config.CurrentContext]
+	obj := ctx.Extensions["kube-dns-configmap"]
+
+	ok := false
+	c, ok := obj.(v1.ConfigMap)
+	if !ok {
+		return nil, fmt.Errorf("error getting the extensions configmap from current context")
+	}
+	if len(c.Data) != 1 {
+		return nil, fmt.Errorf("erroneous data in kubeconfig config cofigmap")
+	}
+
+	clusterClient, err := clusterFactory.ClientSet()
+	if err != nil {
+		return nil, err
+	}
+
+	targetC, err := clusterClient.Core().ConfigMaps(metav1.NamespaceSystem).Get(KubeDnsName, metav1.GetOptions{})
+	if err != nil {
+		if util.IsNotFound(err) {
+			if dryRun {
+				return c, nil
+			}
+			return clusterClient.Core().ConfigMaps(metav1.NamespaceSystem).Create(&c)
+		}
+		return nil, err
+	}
+
+	// We have already checked that only one entry is there
+	for k, v := range c.Data {
+		targetC.Data[k] = v
+	}
+
+	if dryRun {
+		return targetC, nil
+	}
+	return clusterClient.Core().ConfigMaps(metav1.NamespaceSystem).Update(targetC)
 }
