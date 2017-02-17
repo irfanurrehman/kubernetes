@@ -18,7 +18,12 @@ package util
 
 import (
 	"github.com/spf13/pflag"
+	"fmt"
+	"net"
+	"time"
+	"net/url"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -27,6 +32,10 @@ import (
 	client "k8s.io/kubernetes/pkg/client/clientset_generated/internalclientset"
 	kubectlcmd "k8s.io/kubernetes/pkg/kubectl/cmd"
 	cmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
+
+	utilnet "k8s.io/apimachinery/pkg/util/net"
+	restclient "k8s.io/client-go/rest"
+	federationapi "k8s.io/kubernetes/federation/apis/federation"
 
 	"github.com/spf13/cobra"
 )
@@ -39,6 +48,11 @@ const (
 	// DefaultFederationSystemNamespace is the namespace in which
 	// federation system components are hosted.
 	DefaultFederationSystemNamespace = "federation-system"
+	KubeAPIQPS              = 20.0
+	KubeAPIBurst            = 30
+	getSecretTimeout        = 30 * time.Second
+	userAgentName		= "kubefed-tool"
+	KubeDnsName		= "kube-dns"
 )
 
 // AdminConfig provides a filesystem based kubeconfig (via
@@ -143,4 +157,69 @@ func CreateKubeconfigSecret(clientset *client.Clientset, kubeconfig *clientcmdap
 		return clientset.Core().Secrets(namespace).Create(secret)
 	}
 	return secret, nil
+}
+
+// isNotFound checks if the given error is a NotFound status error.
+func IsNotFound(err error) bool {
+	statusErr := err
+	if urlErr, ok := err.(*url.Error); ok {
+		statusErr = urlErr.Err
+	}
+	return errors.IsNotFound(statusErr)
+}
+
+// TODO: figure out a better way of getting the cluster client as in below utility functions
+var KubeconfigGetterForSecret = func(secret *api.Secret) clientcmd.KubeconfigGetter {
+	return func() (*clientcmdapi.Config, error) {
+		var data []byte
+		ok := false
+		data, ok = secret.Data[KubeconfigSecretDataKey]
+		if !ok {
+			return nil, fmt.Errorf("secret does not have data with key: %s", KubeconfigSecretDataKey)
+		}
+		return clientcmd.Load(data)
+	}
+}
+
+func GetClientsetFromSecret(secret *api.Secret, serverAddress string) (*client.Clientset, error) {
+	clusterConfig, err := BuildConfigFromSecret(secret, serverAddress)
+	if err != nil && clusterConfig != nil {
+		clientset := client.NewForConfigOrDie(restclient.AddUserAgent(clusterConfig, userAgentName))
+		return clientset, nil
+	}
+	return nil, err
+}
+
+func GetServerAddress(c *federationapi.Cluster) (string, error) {
+	serverAddress := ""
+	hostIP, err := utilnet.ChooseHostInterface()
+	if err != nil {
+		return "", err
+	}
+
+	for _, item := range c.Spec.ServerAddressByClientCIDRs {
+		_, cidrnet, err := net.ParseCIDR(item.ClientCIDR)
+		if err != nil {
+			return "", err
+		}
+		myaddr := net.ParseIP(hostIP.String())
+		if cidrnet.Contains(myaddr) == true {
+			serverAddress = item.ServerAddress
+			break
+		}
+	}
+
+	return serverAddress, nil
+}
+
+func BuildConfigFromSecret(secret *api.Secret, serverAddress string) (*restclient.Config, error) {
+	kubeconfigGetter := KubeconfigGetterForSecret(secret)
+	clusterConfig, err := clientcmd.BuildConfigFromKubeconfigGetter(serverAddress, kubeconfigGetter)
+	if err != nil {
+		return nil, err
+	}
+	clusterConfig.QPS = KubeAPIQPS
+	clusterConfig.Burst = KubeAPIBurst
+
+	return clusterConfig, nil
 }
