@@ -90,7 +90,7 @@ type ReplicaSetController struct {
 
 	deletionHelper *deletionhelper.DeletionHelper
 
-	defaultPlanner *planner.Planner
+	defaultPlanner planner.Planner
 }
 
 // NewReplicaSetController returns a new replicaset controller
@@ -105,7 +105,7 @@ func NewReplicaSetController(federationClient fedclientset.Interface) *ReplicaSe
 		clusterDeliverer:    fedutil.NewDelayingDeliverer(),
 		replicasetWorkQueue: workqueue.New(),
 		replicaSetBackoff:   flowcontrol.NewBackOff(5*time.Second, time.Minute),
-		defaultPlanner: planner.NewPlanner(&fed.ReplicaAllocationPreferences{
+		defaultPlanner: planner.NewReplicasetPlanner(&fed.ReplicaAllocationPreferences{
 			Clusters: map[string]fed.PerClusterPreferences{
 				"*": {Weight: 1},
 			},
@@ -416,7 +416,7 @@ func (frsc *ReplicaSetController) schedule(frs *extensionsv1.ReplicaSet, cluster
 		glog.Info("Invalid ReplicaSet specific preference, use default. rs: %v, err: %v", frs, err)
 	}
 	if frsPref != nil { // create a new planner if user specified a preference
-		plnr = planner.NewPlanner(frsPref)
+		plnr = planner.NewReplicasetPlanner(frsPref)
 	}
 
 	replicas := int64(*frs.Spec.Replicas)

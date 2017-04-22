@@ -25,7 +25,7 @@ import (
 )
 
 func doCheck(t *testing.T, pref map[string]fedapi.PerClusterPreferences, replicas int64, clusters []string, expected map[string]int64) {
-	planer := NewPlanner(&fedapi.ReplicaAllocationPreferences{
+	planer := NewReplicasetPlanner(&fedapi.ReplicaAllocationPreferences{
 		Clusters: pref,
 	})
 	plan, overflow := planer.Plan(replicas, clusters, map[string]int64{}, map[string]int64{}, "")
@@ -35,7 +35,7 @@ func doCheck(t *testing.T, pref map[string]fedapi.PerClusterPreferences, replica
 
 func doCheckWithExisting(t *testing.T, pref map[string]fedapi.PerClusterPreferences, replicas int64, clusters []string,
 	existing map[string]int64, expected map[string]int64) {
-	planer := NewPlanner(&fedapi.ReplicaAllocationPreferences{
+	planer := NewReplicasetPlanner(&fedapi.ReplicaAllocationPreferences{
 		Clusters: pref,
 	})
 	plan, overflow := planer.Plan(replicas, clusters, existing, map[string]int64{}, "")
@@ -48,7 +48,7 @@ func doCheckWithExistingAndCapacity(t *testing.T, rebalance bool, pref map[strin
 	capacity map[string]int64,
 	expected map[string]int64,
 	expectedOverflow map[string]int64) {
-	planer := NewPlanner(&fedapi.ReplicaAllocationPreferences{
+	planer := NewReplicasetPlanner(&fedapi.ReplicaAllocationPreferences{
 		Rebalance: rebalance,
 		Clusters:  pref,
 	})

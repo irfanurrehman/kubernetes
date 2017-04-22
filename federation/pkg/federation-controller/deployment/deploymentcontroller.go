@@ -85,7 +85,7 @@ type DeploymentController struct {
 
 	deletionHelper *deletionhelper.DeletionHelper
 
-	defaultPlanner *planner.Planner
+	defaultPlanner planner.Planner
 }
 
 // NewDeploymentController returns a new deployment controller
@@ -100,7 +100,7 @@ func NewDeploymentController(federationClient fedclientset.Interface) *Deploymen
 		clusterDeliverer:    fedutil.NewDelayingDeliverer(),
 		deploymentWorkQueue: workqueue.New(),
 		deploymentBackoff:   flowcontrol.NewBackOff(5*time.Second, time.Minute),
-		defaultPlanner: planner.NewPlanner(&fed.ReplicaAllocationPreferences{
+		defaultPlanner: planner.NewReplicasetPlanner(&fed.ReplicaAllocationPreferences{
 			Clusters: map[string]fed.PerClusterPreferences{
 				"*": {Weight: 1},
 			},
@@ -406,7 +406,7 @@ func (fdc *DeploymentController) schedule(fd *extensionsv1.Deployment, clusters 
 		glog.Info("Invalid Deployment specific preference, use default. deployment: %v, err: %v", fd.Name, err)
 	}
 	if fdPref != nil { // create a new planner if user specified a preference
-		plannerToBeUsed = planner.NewPlanner(fdPref)
+		plannerToBeUsed = planner.NewReplicasetPlanner(fdPref)
 	}
 	replicas := int64(0)
 	if fd.Spec.Replicas != nil {
