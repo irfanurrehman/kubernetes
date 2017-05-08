@@ -146,3 +146,11 @@ func (a *SecretAdapter) NewTestObject(namespace string) pkgruntime.Object {
 		Type: apiv1.SecretTypeOpaque,
 	}
 }
+
+func (a *SecretAdapter) GetScheduleHook() util.ScheduleHook {
+	return nil
+}
+
+func (a *SecretAdapter) GetUpdateFedSpecHook() util.UpdateFedSpecHook {
+	return nil
+}
