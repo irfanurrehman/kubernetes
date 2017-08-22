@@ -865,7 +865,8 @@ func isPristine(hpa *autoscalingv1.HorizontalPodAutoscaler) bool {
 // time since this hpa scaled. Its used to avoid fast thrashing.
 func (a *HpaAdapter) isScaleable(hpa *autoscalingv1.HorizontalPodAutoscaler) bool {
 	if hpa.Status.LastScaleTime == nil {
-		return false
+		// We consider the object to be scaleable if not scaled so far
+		return true
 	}
 	t := hpa.Status.LastScaleTime.Add(a.scaleForbiddenWindow)
 	if t.After(time.Now()) {
@@ -925,8 +926,11 @@ func (a *HpaAdapter) maxReplicasNeeded(obj pkgruntime.Object) bool {
 		return false
 	}
 
-	if (hpa.Status.CurrentReplicas == hpa.Status.DesiredReplicas) &&
-		(hpa.Status.CurrentReplicas == hpa.Spec.MaxReplicas) {
+	// We don't compare CurrentReplicas to DesiredReplicas (rather then MaxReplicas)
+	// as behaviour observed on local hpa is sometimes is that current can go
+	// beyond max/desired, but desired replicas are always capped by max.
+	if (hpa.Status.CurrentReplicas >= hpa.Status.DesiredReplicas) &&
+		(hpa.Status.DesiredReplicas == hpa.Spec.MaxReplicas) {
 		return true
 	}
 	return false
