@@ -30,8 +30,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/apimachinery/pkg/util/wait"
 	fedclientset "k8s.io/kubernetes/federation/client/clientset_generated/federation_clientset"
+	fedutil "k8s.io/kubernetes/federation/pkg/federation-controller/util"
 	hpautil "k8s.io/kubernetes/federation/pkg/federation-controller/util/hpa"
 	. "k8s.io/kubernetes/federation/pkg/federation-controller/util/test"
+	"k8s.io/kubernetes/test/e2e/common"
 	"k8s.io/kubernetes/test/e2e/framework"
 	fedframework "k8s.io/kubernetes/test/e2e_federation/framework"
 
@@ -160,41 +162,46 @@ var _ = framework.KubeDescribe("Federated Hpa [Feature:Federation]", func() {
 			// 2. When utilization is driven up in first cluster, replicas move there.
 			// 3. When utilization is driven up in second cluster, replicas move there.
 			It("app replicas move where they are needed most", func() {
-				initialTargetObjReplicas := NewInt32(2)
-				uuidString := string(uuid.NewUUID())
-				matchLabel := fmt.Sprintf("hpa-test-%s", uuidString)
-				dep := createTargetObjOrFail(f.FederationClientset, newHpaTargetObj(nsName, testDeploymentPrefix, initialTargetObjReplicas, matchLabel))
-				svc := createTargetObjSvcOrFail(f.FederationClientset, newTargetObjSvc(nsName, "test-svc", matchLabel))
 
+				rcName := fmt.Sprintf("fed-hpa-rc-%s", clusters[0].Name)
+				const timeToWait = 15 * time.Minute
+				rc := common.NewDynamicResourceConsumer(rcName, nsName, common.KindDeployment, 1, 100, 0, 0, 150, 200, clusters[0].Clientset, clusters[0].InternalClientSet)
+				defer rc.CleanUp()
+
+				// get a copy of deployment and create in federation
+				dep := fedutil.DeepCopyDeployment(getRcObjectFromClusterOrFail(clusters[0], nsName, rcName))
+				createTargetObjOrFail(f.FederationClientset, dep)
+
+				// create the hpa
 				maxHpaReplicas := int32(6)
-				hpa := createHpaOrFail(f.FederationClientset, newHpa(nsName, testHpaPrefix, dep.Name, NewInt32(1), NewInt32(30), maxHpaReplicas))
+				hpa := createHpaOrFail(f.FederationClientset, newHpa(nsName, testHpaPrefix, rcName, NewInt32(1), NewInt32(30), maxHpaReplicas))
 				expected, _ := getExpectedForHpaWithMaxReplicas(clusters, int32(2), int32(2), int32(2))
 				waitForHpaOrFail(f.FederationClientset, nsName, hpa.Name, clusters, expected)
 
-				// we target the svc ip rather then the svc name to avoid dns resolution delay
-				clusterIP := waitForTargetObjSvcIPInCluster(clusters[0], svc)
-				loadGenPodName = fmt.Sprintf("load-generator-%s", uuidString)
-				c1LoadPod := generateLoadOrFail(clusters[0], newLoadGeneratingPod(nsName, loadGenPodName, clusterIP))
-				// most of the target obj replicas should move to cluster[0]
-				expectedTarget := getExpectedForTargetObj(clusters, int32(4), int32(1), int32(1))
-				waitForTargetObjInClustersOrFail(nsName, dep.Name, clusters, expectedTarget, true)
-				// remove load from cluster[0] and add to cluster[1]
-				deleteLoadGenPodOrFail(clusters[0], c1LoadPod.Name, nsName)
-
-				// we target the svc ip rather then the svc name to avoid dns resolution delay
-				clusterIP = waitForTargetObjSvcIPInCluster(clusters[1], svc)
-				c2LoadPod := generateLoadOrFail(clusters[1], newLoadGeneratingPod(nsName, loadGenPodName, clusterIP))
-				// most of the target obj replicas should move to cluster[1]
-				expectedTarget = getExpectedForTargetObj(clusters, int32(1), int32(4), int32(1))
-				waitForTargetObjInClustersOrFail(nsName, dep.Name, clusters, expectedTarget, true)
-
-				// cleanup
-				deleteLoadGenPodOrFail(clusters[1], c2LoadPod.Name, nsName)
+				// consume cpu
+				rc.ConsumeCPU(700)
+				// ensure it can wait for replicas
+				rc.WaitForReplicas(4, timeToWait)
+				rc.Pause()
 
 			})
 		})
 	})
 })
+
+func getRcObjectFromClusterOrFail(cluster *fedframework.Cluster, namespace, targetObjName string) *v1beta1.Deployment {
+	dep := &v1beta1.Deployment{}
+	err := wait.Poll(10*time.Second, fedframework.FederatedDefaultTestTimeout, func() (bool, error) {
+		var err error = nil
+		dep, err = cluster.Extensions().Deployments(namespace).Get(targetObjName, metav1.GetOptions{})
+		if err != nil {
+			return false, err
+		}
+		return true, nil
+	})
+	framework.ExpectNoError(err, "Could not get the target object from federated cluster")
+	return dep
+}
 
 func waitForClusterListOnTargetObjOrFail(clientset *fedclientset.Clientset, nsName, targetObjName string, clusterListLen int) bool {
 	By(fmt.Sprintf("Waiting for hpa set cluster list to be updated on target object %s", targetObjName))
@@ -592,8 +599,8 @@ func getExpectedForHpaWithMaxReplicas(clusters fedframework.ClusterSlice, cluste
 	max += cluster1Replicas
 	expected[clusters[1].Name] = cluster2Replicas
 	max += cluster1Replicas
-	expected[clusters[2].Name] = cluster3Replicas
-	max += cluster1Replicas
+	//expected[clusters[2].Name] = cluster3Replicas
+	//max += cluster1Replicas
 	return expected, max
 }
 
